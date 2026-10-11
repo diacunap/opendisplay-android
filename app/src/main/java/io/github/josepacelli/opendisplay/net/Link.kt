@@ -6,6 +6,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetAddress
 import java.net.Socket
 
 /**
@@ -22,6 +23,10 @@ interface Link {
     /** Peer identity, for logs and mid-session peer-swap detection. */
     val label: String
 
+    /** The peer's network address, or `null` for a transport with none (USB). Used to tell
+     * a reconnect from the same host apart from a takeover by a different one. */
+    val remoteAddress: InetAddress?
+
     /** Releases every resource this link holds. Safe to call more than once. */
     fun close()
 }
@@ -36,6 +41,7 @@ class SocketLink(private val socket: Socket) : Link {
     override val input: InputStream = socket.getInputStream()
     override val output: OutputStream = socket.getOutputStream()
     override val label: String = socket.remoteSocketAddress?.toString() ?: "unknown"
+    override val remoteAddress: InetAddress? = socket.inetAddress
 
     override fun close() {
         socket.close()
@@ -55,6 +61,7 @@ class AccessoryLink(private val descriptor: ParcelFileDescriptor) : Link {
 
     /** Single accessory host — no address to report. */
     override val label: String = "usb-accessory"
+    override val remoteAddress: InetAddress? = null
 
     override fun close() {
         try {
