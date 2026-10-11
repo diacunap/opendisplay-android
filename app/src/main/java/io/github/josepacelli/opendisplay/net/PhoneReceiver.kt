@@ -184,6 +184,23 @@ class PhoneReceiver(context: Context) {
             }
         }
 
+        /** Whether a newly accepted TCP connection from [newAddress] should take over the
+         * active session (see SECURITY.md/SCR-001: the control/video socket has no peer
+         * authentication). A reconnect from the same host is allowed — the Mac's `adb forward`
+         * tunnel or a WiFi blip both reconnect from the same address — but no other host may
+         * interrupt an active session; it must wait for a clean disconnect or the watchdog
+         * timeout to make [hasActiveSession] false again.
+         * @param currentAddress the active peer's address, or `null` if it has none (USB).
+         * @param hasActiveSession whether a session is currently active, of any transport.
+         * @param newAddress the address of the connection being considered. */
+        internal fun shouldAccept(
+            currentAddress: InetAddress?,
+            hasActiveSession: Boolean,
+            newAddress: InetAddress,
+        ): Boolean {
+            return !hasActiveSession || currentAddress == newAddress
+        }
+
         /** Returns a version of [input] safe for logging: newlines replaced with \\n and
          * control characters stripped or escaped. Limits length to prevent log spam. */
         private fun safeStringToLog(input: String): String {
@@ -815,6 +832,12 @@ class PhoneReceiver(context: Context) {
                 Log.info("listening on ${bindAddress.hostAddress}:$port")
                 while (running.get()) {
                     val client = server.accept()
+                    val activeLink = link
+                    if (!shouldAccept(activeLink?.remoteAddress, activeLink != null, client.inetAddress)) {
+                        Log.warn("rejecting connection from ${client.remoteSocketAddress} — a session is already active")
+                        client.close()
+                        continue
+                    }
                     Log.info("new connection from ${client.remoteSocketAddress}")
                     acceptConnection(SocketLink(client))
                 }
