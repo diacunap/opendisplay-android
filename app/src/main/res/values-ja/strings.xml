@@ -70,13 +70,14 @@
     <string name="about_mac_app">Macアプリ</string>
     <string name="about_close">閉じる</string>
 
-    <string-array name="changelog_v0_0_50">
+    <string-array name="changelog_v0_0_51">
+        <item>別のコンピュータがアクティブなセッションを乗っ取れなくなりました。接続中は、別のピアからの新しい接続を拒否します。</item>
+    </string-array>
+    <string-array name="changelog_older_versions">
         <item>接続中に表示されるフローティングメニューを追加（Teams風）。Macでマウスを動かしても非表示になります。</item>
         <item>Macから送られる更新リンクは、このアプリ自身のストアページを指す場合のみ有効になりました。</item>
         <item>Macから送られる長すぎる「更新が必要」メッセージを切り詰めるようにしました。</item>
         <item>リリースビルドでは、端末や接続先のIPアドレスをlogcatに出力しなくなりました。</item>
-    </string-array>
-    <string-array name="changelog_older_versions">
         <item>「更新履歴」タブが自分自身のバージョンの項目なしで配布されていた問題を修正。</item>
         <item>修正：WiFiと同時にVPNが有効な場合、WiFiリスナーが実際のLAN IPではなくVPNのトンネルアドレスを解決してしまう問題を修正 — 現在は「VPN有効」という明確なメッセージとともに閉じた状態になります。</item>
         <item>設定に「更新履歴」タブを追加 — v0.0.37以降の全リリースを、アプリの7言語すべてに翻訳して掲載。</item>

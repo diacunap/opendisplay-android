@@ -70,13 +70,14 @@
     <string name="about_mac_app">Mac 앱</string>
     <string name="about_close">닫기</string>
 
-    <string-array name="changelog_v0_0_50">
+    <string-array name="changelog_v0_0_51">
+        <item>두 번째 컴퓨터가 활성 세션을 가로챌 수 없습니다. 연결된 동안에는 다른 피어의 새 연결을 거부합니다.</item>
+    </string-array>
+    <string-array name="changelog_older_versions">
         <item>연결 중 표시되는 플로팅 메뉴 추가 (Teams 스타일). Mac에서 마우스를 움직여도 메뉴가 숨겨집니다.</item>
         <item>Mac에서 보낸 업데이트 링크는 이제 이 앱의 스토어 페이지를 가리킬 때만 허용됩니다.</item>
         <item>Mac에서 보낸 너무 긴 \"업데이트 필요\" 메시지를 이제 잘라서 표시합니다.</item>
         <item>릴리스 빌드에서 기기 및 상대방의 IP 주소를 더 이상 logcat에 기록하지 않습니다.</item>
-    </string-array>
-    <string-array name="changelog_older_versions">
         <item>변경 내역 탭이 자신의 버전 항목 없이 배포되던 문제 수정.</item>
         <item>수정: WiFi와 VPN이 동시에 활성화된 경우 WiFi 리스너가 실제 LAN IP 대신 VPN 터널 주소를 사용하던 문제 수정 — 이제 \"VPN 활성\" 메시지와 함께 안전하게 차단됩니다.</item>
         <item>설정에 새 변경 내역 탭 추가 — v0.0.37 이후 모든 릴리스를 앱의 7개 언어 전부로 번역해 제공.</item>

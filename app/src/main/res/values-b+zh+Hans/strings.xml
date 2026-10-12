@@ -70,13 +70,14 @@
     <string name="about_mac_app">Mac 应用</string>
     <string name="about_close">关闭</string>
 
-    <string-array name="changelog_v0_0_50">
+    <string-array name="changelog_v0_0_51">
+        <item>另一台电脑无法再接管正在进行的会话：已有连接时，来自其他对端的新连接会被拒绝。</item>
+    </string-array>
+    <string-array name="changelog_older_versions">
         <item>新增连接时显示的悬浮菜单（Teams 风格）。在 Mac 上移动鼠标也会将其隐藏。</item>
         <item>Mac 发来的更新链接现在只有指向本应用自己的商店页面时才会被接受。</item>
         <item>Mac 发来的过长\"需要更新\"消息现在会被截断。</item>
         <item>发布版本不再将设备或对端的 IP 地址写入 logcat。</item>
-    </string-array>
-    <string-array name="changelog_older_versions">
         <item>修复更新日志标签页发布时缺少自身版本条目的问题。</item>
         <item>修复：WiFi 和 VPN 同时开启时，WiFi 监听器可能解析到 VPN 隧道地址而不是真实局域网 IP — 现在会直接关闭监听并显示明确的\"VPN 已开启\"提示。</item>
         <item>设置中新增"更新日志"标签页 — 展示自 v0.0.37 以来的每个版本，已翻译成全部 7 种应用语言。</item>

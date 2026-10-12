@@ -70,13 +70,14 @@
     <string name="about_mac_app">App do Mac</string>
     <string name="about_close">Fechar</string>
 
-    <string-array name="changelog_v0_0_50">
+    <string-array name="changelog_v0_0_51">
+        <item>Um segundo computador não consegue mais assumir uma sessão ativa: conexões novas de outro peer são rejeitadas enquanto houver uma conectada.</item>
+    </string-array>
+    <string-array name="changelog_older_versions">
         <item>Novo menu flutuante enquanto conectado, estilo Teams. Mexer o mouse no Mac também esconde o menu.</item>
         <item>O link de atualização enviado pelo Mac agora só vale se apontar pra página do próprio app na loja.</item>
         <item>Mensagens de \"atualização necessária\" longas demais, enviadas pelo Mac, agora são truncadas.</item>
         <item>Builds de release não escrevem mais IPs do dispositivo ou do par no logcat.</item>
-    </string-array>
-    <string-array name="changelog_older_versions">
         <item>Corrigida a aba Novidades saindo sem uma entrada pra própria versão.</item>
         <item>Corrigido: o listener de WiFi podia resolver o endereço do túnel de uma VPN em vez do IP real da rede local quando a VPN estava ativa junto do WiFi — agora fica fechado por padrão, com uma mensagem clara de \"VPN ativa\".</item>
         <item>Nova aba Novidades em Configurações — todas as versões desde a v0.0.37, traduzidas nos 7 idiomas do app.</item>
