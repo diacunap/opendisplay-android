@@ -150,6 +150,12 @@ original project's author.
   ([#44](https://github.com/josepacelli/opendisplay-android/issues/44)), and suggested the
   immersive fullscreen mode
   ([#45](https://github.com/josepacelli/opendisplay-android/issues/45)).
+- [@gilsonfiho](https://github.com/gilsonfiho) hardened the app and CI: pinned GitHub Actions to
+  commit SHAs ([#153](https://github.com/josepacelli/opendisplay-android/pull/153)), truncated the
+  peer-supplied update message
+  ([#162](https://github.com/josepacelli/opendisplay-android/pull/162)), and rejected session
+  takeover by a different peer
+  ([#165](https://github.com/josepacelli/opendisplay-android/pull/165)).
 
 ## Support
 

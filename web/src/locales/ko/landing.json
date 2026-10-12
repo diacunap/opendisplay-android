@@ -169,7 +169,8 @@
       { "handle": "@edoardomich", "text": "Android 12/13 실행 시 크래시를 수정 (<pr5>#5</pr5>)." },
       { "handle": "@jpbhdrey", "text": "USB 액세서리(AOA) 전송 방식을 구현 (<pr33>#33</pr33>): 케이블을 꽂고 시스템 프롬프트를 누르기만 하면 끝, 개발자 옵션도 <code>adb</code>와의 씨름도 필요 없습니다." },
       { "handle": "@dyss1992", "text": "일부 Qualcomm 디코더에서 발생하는 Mirror 모드 화면 비율 버그를, 전후 비교로 근본 원인을 명확히 드러낸 리포트로 제보 (<issue44>#44</issue44>), 몰입형 전체 화면 모드도 제안 (<issue45>#45</issue45>)." },
-      { "handle": "@VirgilChen97", "text": "정지 화면에서 타이핑/호버가 지연되는 문제의 진짜 근본 원인을, 수정 코드가 한 줄도 없던 시점에 <issue113>#113</issue113> 댓글에서 정확히 짚어냄." }
+      { "handle": "@VirgilChen97", "text": "정지 화면에서 타이핑/호버가 지연되는 문제의 진짜 근본 원인을, 수정 코드가 한 줄도 없던 시점에 <issue113>#113</issue113> 댓글에서 정확히 짚어냄." },
+      { "handle": "@gilsonfiho", "text": "앱과 CI를 강화했습니다. GitHub Actions를 커밋 SHA로 고정 (<pr153>#153</pr153>), 피어가 보낸 업데이트 메시지를 잘라내기 (<pr162>#162</pr162>), 다른 피어의 세션 가로채기 거부 (<pr165>#165</pr165>)." }
     ]
   },
   "support": {

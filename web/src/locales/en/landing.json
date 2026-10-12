@@ -169,7 +169,8 @@
       { "handle": "@edoardomich", "text": "fixed the Android 12/13 launch crash (<pr5>#5</pr5>)." },
       { "handle": "@jpbhdrey", "text": "built the USB accessory (AOA) transport (<pr33>#33</pr33>): plug the cable, tap the system's prompt, done, no developer options or <code>adb</code> dance required." },
       { "handle": "@dyss1992", "text": "reported the Mirror mode aspect ratio bug on some Qualcomm decoders with a controlled before/after comparison that made the root cause obvious (<issue44>#44</issue44>), and suggested the immersive fullscreen mode (<issue45>#45</issue45>)." },
-      { "handle": "@VirgilChen97", "text": "pinpointed the real root cause of delayed typing/hover on a static screen in a comment on <issue113>#113</issue113>, before a single line of the fix existed." }
+      { "handle": "@VirgilChen97", "text": "pinpointed the real root cause of delayed typing/hover on a static screen in a comment on <issue113>#113</issue113>, before a single line of the fix existed." },
+      { "handle": "@gilsonfiho", "text": "hardened the app and CI: pinned GitHub Actions to commit SHAs (<pr153>#153</pr153>), truncated the peer-supplied update message (<pr162>#162</pr162>), and rejected session takeover by a different peer (<pr165>#165</pr165>)." }
     ]
   },
   "support": {

@@ -169,7 +169,8 @@
       { "handle": "@edoardomich", "text": "修复了安卓 12/13 的启动崩溃问题（<pr5>#5</pr5>）。" },
       { "handle": "@jpbhdrey", "text": "实现了 USB 配件（AOA）传输方式（<pr33>#33</pr33>）：插上数据线，点一下系统弹窗即可，无需开发者选项，也不用折腾 <code>adb</code>。" },
       { "handle": "@dyss1992", "text": "通过有对照的前后对比，报告了部分高通解码器在 Mirror 模式下的宽高比问题，让根因一目了然（<issue44>#44</issue44>），并建议了沉浸式全屏模式（<issue45>#45</issue45>）。" },
-      { "handle": "@VirgilChen97", "text": "在<issue113>#113</issue113>的评论里，在修复代码还一行都没有的时候，就准确指出了静态画面下打字/悬停延迟的真正根因。" }
+      { "handle": "@VirgilChen97", "text": "在<issue113>#113</issue113>的评论里，在修复代码还一行都没有的时候，就准确指出了静态画面下打字/悬停延迟的真正根因。" },
+      { "handle": "@gilsonfiho", "text": "加固了应用和 CI：将 GitHub Actions 固定到提交 SHA (<pr153>#153</pr153>)，截断对端发送的更新消息 (<pr162>#162</pr162>)，并拒绝其他对端接管会话 (<pr165>#165</pr165>)。" }
     ]
   },
   "support": {

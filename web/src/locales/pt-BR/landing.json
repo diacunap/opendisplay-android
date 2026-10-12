@@ -169,7 +169,8 @@
       { "handle": "@edoardomich", "text": "corrigiu o crash de abertura no Android 12/13 (<pr5>#5</pr5>)." },
       { "handle": "@jpbhdrey", "text": "construiu o transporte de acessório USB (AOA) (<pr33>#33</pr33>): pluga o cabo, toca no aviso do sistema, pronto, sem opções de desenvolvedor nem dança de <code>adb</code>." },
       { "handle": "@dyss1992", "text": "reportou o bug de proporção no modo Mirror em alguns decodificadores Qualcomm com uma comparação controlada de antes/depois que deixou óbvia a causa raiz (<issue44>#44</issue44>), e sugeriu o modo tela cheia imersivo (<issue45>#45</issue45>)." },
-      { "handle": "@VirgilChen97", "text": "apontou a causa raiz certa do atraso de digitação/hover em tela estática num comentário na <issue113>#113</issue113>, antes de qualquer linha da correção existir." }
+      { "handle": "@VirgilChen97", "text": "apontou a causa raiz certa do atraso de digitação/hover em tela estática num comentário na <issue113>#113</issue113>, antes de qualquer linha da correção existir." },
+      { "handle": "@gilsonfiho", "text": "reforçou a segurança do app e do CI: fixou as GitHub Actions em SHA de commit (<pr153>#153</pr153>), truncou a mensagem de atualização enviada pelo peer (<pr162>#162</pr162>) e passou a rejeitar a tomada de sessão por outro peer (<pr165>#165</pr165>)." }
     ]
   },
   "support": {

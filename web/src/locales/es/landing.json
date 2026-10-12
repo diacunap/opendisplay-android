@@ -169,7 +169,8 @@
       { "handle": "@edoardomich", "text": "corrigió el fallo al abrir en Android 12/13 (<pr5>#5</pr5>)." },
       { "handle": "@jpbhdrey", "text": "construyó el transporte de accesorio USB (AOA) (<pr33>#33</pr33>): conecta el cable, acepta el aviso del sistema, listo, sin opciones de desarrollador ni bailar con <code>adb</code>." },
       { "handle": "@dyss1992", "text": "reportó el error de aspecto en modo Mirror en algunos decodificadores Qualcomm con una comparación controlada de antes/después que dejó claro el origen del problema (<issue44>#44</issue44>), y sugirió el modo de pantalla completa inmersivo (<issue45>#45</issue45>)." },
-      { "handle": "@VirgilChen97", "text": "señaló la causa raíz correcta del retraso al escribir o pasar el cursor en una pantalla estática, en un comentario en el <issue113>#113</issue113>, antes de que existiera una sola línea de la corrección." }
+      { "handle": "@VirgilChen97", "text": "señaló la causa raíz correcta del retraso al escribir o pasar el cursor en una pantalla estática, en un comentario en el <issue113>#113</issue113>, antes de que existiera una sola línea de la corrección." },
+      { "handle": "@gilsonfiho", "text": "reforzó la seguridad de la app y del CI: fijó las GitHub Actions a SHA de commit (<pr153>#153</pr153>), truncó el mensaje de actualización enviado por el peer (<pr162>#162</pr162>) y rechazó la toma de sesión por otro peer (<pr165>#165</pr165>)." }
     ]
   },
   "support": {
