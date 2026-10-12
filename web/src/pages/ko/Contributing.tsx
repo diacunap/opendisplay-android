@@ -72,6 +72,17 @@ adb logcat -s OpenDisplay:*      # 앱 로그`}</code>
       </section>
 
       <section>
+        <h2>프로토콜 호환성</h2>
+        <p>이 클라이언트는 수정되지 않은 OpenDisplay Mac 앱과 통신하므로 <strong>보안 강화를 포함해 어떤 변경도 통신 프로토콜을 깨뜨려서는 안 됩니다.</strong> 기준은 upstream의 <a href="https://github.com/peetzweg/opendisplay/blob/main/PROTOCOL.md"><code>PROTOCOL.md</code></a>이며, 그 MUST / MUST NOT 규칙이 여기에도 적용됩니다. 네트워크, 핸드셰이크, 프레이밍, 세션 처리를 건드리기 전에:</p>
+        <ul className="mt-2.5">
+          <li><code>PROTOCOL.md</code>의 해당 섹션을 읽고 변경 사항과 대조하세요.</li>
+          <li>알 수 없는 메시지 타입과 필드는 무시하며 치명적 오류로 다루지 않습니다. 파싱할 수 없는 제어 페이로드도 무시합니다.</li>
+          <li>하드닝(연결 거부, 필드 자르기·검증, 크기 제한, 메시지 폐기)이 정상 세션을 끊거나 전송 내용을 바꾸면 안 됩니다. 애매하면 거부하지 말고 성능을 낮춰 동작시키세요.</li>
+          <li>의도적으로 스펙에서 벗어난다면 PR에 밝히고, <code>RATIONALE.md</code>에 이유를 적고, 실제 Mac 앱으로 테스트하세요(네트워크 전환, 재연결, 회전, 절전/복귀).</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>테스트와 커버리지</h2>
         <p>
           순수 로직(파서, 프로토콜 상수, Android 프레임워크에 의존하지 않는 클래스)은{' '}

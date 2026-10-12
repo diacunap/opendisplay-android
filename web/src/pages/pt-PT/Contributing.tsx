@@ -78,6 +78,17 @@ adb logcat -s OpenDisplay:*      # logs da app`}</code>
       </section>
 
       <section>
+        <h2>Compatibilidade de protocolo</h2>
+        <p>Este cliente fala com a app de Mac do OpenDisplay sem modificação, pelo que <strong>nenhuma alteração pode quebrar o protocolo — incluindo ajustes de segurança.</strong> O <a href="https://github.com/peetzweg/opendisplay/blob/main/PROTOCOL.md"><code>PROTOCOL.md</code></a> do upstream é a referência, e as regras MUST / MUST NOT aplicam-se aqui. Antes de mexer em rede, handshake, framing ou sessão:</p>
+        <ul className="mt-2.5">
+          <li>Leia a secção relevante do <code>PROTOCOL.md</code> e confira a sua alteração com ela.</li>
+          <li>Tipo ou campo desconhecido é ignorado, nunca fatal. Payload de controlo que não faz parse também é ignorado.</li>
+          <li>Hardening (rejeitar ligação, truncar ou validar campo, limitar tamanho, descartar mensagem) não pode derrubar uma sessão legítima nem alterar o que vai no fio. Em caso de dúvida, degrade em vez de rejeitar.</li>
+          <li>Se a alteração diverge do spec de propósito, diga-o no PR, explique o motivo no <code>RATIONALE.md</code> e teste com a app de Mac real (troca de rede, reconexão, rotação, sleep/wake).</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>Testes e cobertura</h2>
         <p>
           Lógica pura (parsers, constantes de protocolo, classes que não dependem do framework

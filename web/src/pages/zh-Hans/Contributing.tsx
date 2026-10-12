@@ -71,6 +71,17 @@ adb logcat -s OpenDisplay:*      # 应用日志`}</code>
       </section>
 
       <section>
+        <h2>协议兼容性</h2>
+        <p>本客户端与未经修改的 OpenDisplay Mac 应用通信，因此<strong>任何改动都不能破坏线路协议，安全加固也不例外。</strong>上游的 <a href="https://github.com/peetzweg/opendisplay/blob/main/PROTOCOL.md"><code>PROTOCOL.md</code></a> 是依据，其中的 MUST / MUST NOT 规则在这里同样适用。在改动网络、握手、分帧或会话处理之前：</p>
+        <ul className="mt-2.5">
+          <li>阅读 <code>PROTOCOL.md</code> 的相关章节，并用它检查你的改动。</li>
+          <li>未知的消息类型和字段一律忽略，绝不视为致命错误。无法解析的控制负载同样忽略。</li>
+          <li>加固措施（拒绝连接、截断或校验字段、限制大小、丢弃消息）不能中断合法会话，也不能改变线路上的内容。拿不准时，选择降级而不是拒绝。</li>
+          <li>如果改动有意偏离规范，请在 PR 中说明，在 <code>RATIONALE.md</code> 写明原因，并用真实的 Mac 应用测试（切换网络、重连、旋转、睡眠/唤醒）。</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>测试与覆盖率</h2>
         <p>
           纯逻辑代码（解析器、协议常量、不依赖 Android 框架的类）需要单元测试，将

@@ -79,6 +79,17 @@ adb logcat -s OpenDisplay:*      # app logs`}</code>
       </section>
 
       <section>
+        <h2>Protocol compatibility</h2>
+        <p>This client talks to the unmodified OpenDisplay Mac app, so <strong>no change may break the wire protocol — security hardening included.</strong> The upstream <a href="https://github.com/peetzweg/opendisplay/blob/main/PROTOCOL.md"><code>PROTOCOL.md</code></a> is the reference, and its MUST / MUST NOT rules apply here. Before touching networking, the handshake, framing or session handling:</p>
+        <ul className="mt-2.5">
+          <li>Read the relevant <code>PROTOCOL.md</code> section and check it against your change.</li>
+          <li>Unknown message types and fields are ignored, never fatal. Unparseable control payloads are ignored too.</li>
+          <li>Hardening (rejecting a connection, truncating or validating a field, capping a size, dropping a message) must not drop a legitimate session or change what goes on the wire. When in doubt, degrade instead of reject.</li>
+          <li>If a change deliberately diverges from the spec, say so in the PR, explain why in <code>RATIONALE.md</code>, and test it against the real Mac app (network switch, reconnect, rotation, sleep/wake).</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>Tests and coverage</h2>
         <p>
           Pure logic (parsers, protocol constants, non-Android-framework classes) needs unit tests

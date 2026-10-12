@@ -71,6 +71,17 @@ adb logcat -s OpenDisplay:*      # アプリのログ`}</code>
       </section>
 
       <section>
+        <h2>プロトコル互換性</h2>
+        <p>このクライアントは未改造の OpenDisplay Mac アプリと通信します。そのため<strong>セキュリティ強化を含め、通信プロトコルを壊す変更は認められません。</strong>基準は upstream の <a href="https://github.com/peetzweg/opendisplay/blob/main/PROTOCOL.md"><code>PROTOCOL.md</code></a> で、その MUST / MUST NOT ルールがここでも適用されます。ネットワーク、ハンドシェイク、フレーミング、セッション処理に手を入れる前に:</p>
+        <ul className="mt-2.5">
+          <li><code>PROTOCOL.md</code> の該当セクションを読み、変更内容と照らし合わせてください。</li>
+          <li>未知のメッセージ種別やフィールドは無視し、致命的エラーにはしません。パースできない制御ペイロードも無視します。</li>
+          <li>ハードニング（接続の拒否、フィールドの切り詰めや検証、サイズ上限、メッセージの破棄）で、正当なセッションを切ったり通信内容を変えたりしてはいけません。迷ったら拒否ではなく縮退させてください。</li>
+          <li>意図的に仕様から外れる場合は、PR でそう明記し、<code>RATIONALE.md</code> に理由を書き、実際の Mac アプリで検証してください（ネットワーク切り替え、再接続、回転、スリープ/復帰）。</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>テストとカバレッジ</h2>
         <p>
           純粋なロジック（パーサー、プロトコルの定数、Androidフレームワークに依存しないクラス）は、
