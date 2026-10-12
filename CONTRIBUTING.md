@@ -41,6 +41,25 @@ Requires the Android SDK installed, with `ANDROID_HOME`/`local.properties` point
   [`RATIONALE.md`](RATIONALE.md), not inline.
 - Kotlin + Jetpack Compose, following the structure already in `app/src/main/java/`.
 
+## Protocol compatibility
+
+This client talks to the unmodified OpenDisplay Mac app, so **no change may break the wire
+protocol — security hardening included.** The upstream
+[`PROTOCOL.md`](https://github.com/peetzweg/opendisplay/blob/main/PROTOCOL.md) is the reference,
+and its MUST / MUST NOT rules apply here.
+
+Before touching networking, the handshake, framing or session handling:
+
+- Read the relevant `PROTOCOL.md` section and check it against your change.
+- Unknown message types and fields are ignored, never fatal. Unparseable control payloads are
+  ignored too.
+- Hardening (rejecting a connection, truncating or validating a field, capping a size, dropping
+  a message) must not drop a legitimate session or change what goes on the wire. When in doubt,
+  degrade instead of reject.
+- If a change deliberately diverges from the spec, say so in the PR, explain why in
+  [`RATIONALE.md`](RATIONALE.md), and test it against the real Mac app (network switch,
+  reconnect, rotation, sleep/wake).
+
 ## Tests and coverage
 
 Pure logic (parsers, protocol constants, non-Android-framework classes) needs unit tests keeping

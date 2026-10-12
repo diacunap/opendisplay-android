@@ -26,8 +26,15 @@ local.properties
 /release.sh
 
 # Config/doc do Claude Code — fica só local, não versionado (pedido do usuário).
+# Exceção: as 3 skills do projeto (wire-protocol, run, simplicidade); as demais em
+# .claude/skills são cópias de terceiros e continuam locais.
 /CLAUDE.md
-/.claude/
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/wire-protocol/
+!/.claude/skills/run/
+!/.claude/skills/simplicidade/
 
 # Referência estável (arquitetura, protocolo, convenções) — CLAUDE.md é o espelho
 # dela pro Claude Code. Mesmo tratamento: só local, não versionado.
