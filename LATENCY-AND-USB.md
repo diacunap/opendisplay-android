@@ -1,6 +1,6 @@
 # Latency breakdown, older-Android low-latency decode, and USB
 
-This fork of the Android receiver adds three things on top of
+This fork of the Android receiver adds four things on top of
 [josepacelli/opendisplay-android](https://github.com/josepacelli/opendisplay-android).
 It is designed to pair with the Mac sender fork
 [diacunap/opendisplay](https://github.com/diacunap/opendisplay), which adds a
@@ -38,7 +38,24 @@ without rendering instead of being shown first (showing it would only add a
 display refresh of lag). Decoding has already happened, so the H.264
 reference chain is unaffected. Skips per second appear in the HUD as `skip N`.
 
-## 3. Per-stage latency, in milliseconds
+## 3. No more frame drops from a busy UI thread
+
+Upstream fed MediaCodec from the main (UI) thread and dropped a frame whenever
+the decoder had no free input buffer. Any UI hiccup therefore lost a frame,
+and in H.264 one lost frame corrupts the picture until the next keyframe — the
+"glitchy" video seen on slower tablets, worse at high bitrates. Now frames are
+fed from a dedicated thread, the decoder gets up to 30 ms to free an input
+buffer, and the receive buffer holds 16 frames instead of 4. A drop that still
+happens is logged (`decoder input full …`) and triggers a keyframe request.
+
+Kill-switch to rule out the vendor low-latency keys without rebuilding:
+
+```bash
+adb shell touch /sdcard/Android/data/io.github.josepacelli.opendisplay/files/no-lowlatency
+# reopen the app; `rm` the file to turn them back on
+```
+
+## 4. Per-stage latency, in milliseconds
 
 Every frame is timed stage by stage and the per-second medians are shown in
 the performance HUD (Settings → performance overlay):
@@ -83,7 +100,7 @@ Building needs JDK 17+ and the Android SDK (`local.properties` → `sdk.dir`).
 
 | Device | OS | Status |
 | --- | --- | --- |
-| Huawei MatePad 10.4 (BAH3-W59) | HarmonyOS 2 (API 29) | builds and installs; latency numbers being collected |
+| Huawei MatePad 10.4 (BAH3-W59) | HarmonyOS 2 (API 29) | USB connection working with the sender fork; latency figures and glitch fixes being validated |
 
 Please report results for other devices with a HUD screenshot or a
 `PHONE-STATS` line.
@@ -95,6 +112,6 @@ Please report results for other devices with a HUD screenshot or a
 - `net/PhoneReceiver.kt` — `LatencySample`, stage fields on `VideoFrame`,
   per-second aggregation, `stats` to the Mac.
 - `net/AnnexB.kt` — parse optional `scr` telemetry field.
-- `ui/ReceiverScreen.kt` — HUD breakdown; `ui/VideoSurface.kt` — wiring.
+- `ui/ReceiverScreen.kt` — HUD breakdown; `ui/VideoSurface.kt` — wiring and the dedicated decoder feed thread.
 
 GPL-3.0, as upstream. Changes © 2026 diacunap.

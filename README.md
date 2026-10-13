@@ -1,179 +1,119 @@
-> [!NOTE]
-> **Fork: USB + latency for older tablets.** This fork adds low-latency decode
-> on Android 10 and older (incl. HarmonyOS 2) via SoC vendor keys, a
-> render-latest output policy, and a **per-stage latency breakdown in ms**
-> (capture / encode / network / queue / decode / display) in the HUD. For a
-> plug-and-play **USB cable** connection, pair it with the Mac sender fork
-> [diacunap/opendisplay](https://github.com/diacunap/opendisplay).
-> Details: **[LATENCY-AND-USB.md](LATENCY-AND-USB.md)**.
-> Not affiliated with or supported by the upstream projects.
+# OpenDisplay Android — USB & low-latency fork
 
-# OpenDisplay Android
+**Use an Android tablet as a real second monitor for your Mac, over a USB cable, with the
+latency measured stage by stage.**
 
-![OpenDisplay banner](web/public/banner.jpg)
+This is a fork of [josepacelli/opendisplay-android](https://github.com/josepacelli/opendisplay-android),
+the Android receiver for [OpenDisplay](https://github.com/peetzweg/opendisplay). It exists
+because the stock setup didn't work well on an older tablet (Huawei MatePad 10.4, HarmonyOS 2):
+no plug-and-play cable path, decoding in normal (high-latency) mode, and no way to see where the
+milliseconds went. Everything here is aimed at that: **wired, low-latency, measurable**.
 
-[![Latest release](https://img.shields.io/github/v/release/josepacelli/opendisplay-android?label=release)](https://github.com/josepacelli/opendisplay-android/releases/latest)
-[![Tests](https://github.com/josepacelli/opendisplay-android/actions/workflows/tests.yml/badge.svg)](https://github.com/josepacelli/opendisplay-android/actions/workflows/tests.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/josepacelli/opendisplay-android?style=flat)](https://github.com/josepacelli/opendisplay-android/stargazers)
+It is meant to be used with the matching Mac sender fork,
+**[diacunap/opendisplay](https://github.com/diacunap/opendisplay)**, which adds automatic USB
+(adb) support for Android. Both stay wire-compatible with the official apps.
 
-**Turn your spare Android tablet into a second monitor for your Mac** — free, open source, no
-subscription. A Duet Display, Sidecar and Spacedesk alternative for anyone who already owns an
-Android tablet or phone and wants a real extended display, not just screen mirroring.
+> Unofficial and unaffiliated. Not supported by the upstream authors — please report issues here.
 
-Unofficial Android client for [OpenDisplay](https://github.com/peetzweg/opendisplay), filling the
-role of Sidecar/Duet Display: a real extended display (not just mirroring), low-latency H.264,
-over WiFi or USB, with touch and scroll input — speaking the same network protocol as the
-official app, with no changes required on the Mac side.
+## What this fork changes
 
-[Website & download](https://opendisplay.jpmo.dev.br) ·
-[How it works](#how-it-works) · [Screenshots](#screenshots) · [Features](#features) ·
-[Compare](#compare) · [Install](#install) · [Build](#build) · [Usage](#usage) ·
-[License](#license)
+| | Upstream receiver | This fork |
+| --- | --- | --- |
+| Low-latency decode on Android ≤ 10 (incl. HarmonyOS 2) | Off (`KEY_LOW_LATENCY` is API 30+) | **On**, via SoC vendor keys (Kirin, Qualcomm, Exynos, MediaTek), with safe fallback |
+| Decoder choice | Whatever `createDecoderByType` returns | Explicit; hardware vs. software shown in the HUD |
+| Stale decoded frames | Rendered in order | **Render-latest**: an older picture is skipped when a newer one is ready |
+| Frame feeding | Main (UI) thread; frame dropped if the decoder is busy | **Dedicated thread**, waits up to 30 ms, 16-frame buffer: fewer drops, fewer glitches |
+| Latency readout | fps · end-to-end to arrival · RTT | **Per stage**: capture · encode · network · queue · decode · display · total (p50/p95) |
+| Latency in the Mac's log | — | `PHONE-STATS` line every 5 s |
+| USB with the Mac | Manual `adb forward` + hidden Mac override, or AOA with a separate host tool | **Plug and play** with the [sender fork](https://github.com/diacunap/opendisplay) |
 
-The original OpenDisplay project only ships an iOS/iPadOS client. This repository is the Android
-version: the wire protocol, framing and Annex-B handling are ported from the upstream Swift
-client, while the Android UI and `MediaCodec` pipeline are written fresh in Kotlin.
+Details, rationale and the exact keys used: **[LATENCY-AND-USB.md](LATENCY-AND-USB.md)**.
 
 ## How it works
 
 ```
-MAC (sender, original project, unmodified)         ANDROID (this project)
-CGVirtualDisplay
-  → ScreenCaptureKit → VideoToolbox H.264
-  → TCP [4-byte length BE][Annex-B frame] ══════→ listens on port 9000
-                                                        → MediaCodec (Surface) → SurfaceView
-  ← control JSON (hello, touch, scroll, ping) ════
+MAC (diacunap/opendisplay)                        ANDROID (this fork)
+virtual display → ScreenCaptureKit
+  → VideoToolbox H.264 (low-latency RC)
+  → adb forward ═══ USB cable ═══════════════════→ listener :9000
+     (or WiFi/Bonjour, unchanged)                   → feed thread → MediaCodec
+                                                      (vendor low-latency) → Surface
+  ← touch / scroll / ping / stats ══════════════
 ```
 
-The Android device listens and the Mac connects — that's what lets it work over WiFi with zero
-manual setup, via mDNS/Bonjour discovery (`_opensidecar._tcp`).
+The protocol is OpenDisplay's own ([PROTOCOL.md](https://github.com/peetzweg/opendisplay/blob/main/PROTOCOL.md)):
+the receiver listens on TCP 9000, the Mac connects. Over USB the Mac reaches that port through
+`adb forward`; nothing on the wire changes.
 
-## Screenshots
+## Latency HUD
 
-<img src="web/public/screenshots/tablet-mirroring-site.jpeg" alt="Android tablet on a desk, mirroring this project's website from the Mac over WiFi" width="420"> <img src="web/public/screenshots/app-home.jpeg" alt="OpenDisplay Android app home screen, listening on port 9000 and waiting for the Mac to connect" width="420">
+Enable the performance overlay in Settings:
 
-No staged mockups — real hardware, real WiFi connection. More shots (settings, mid-session
-mirroring, the Mac's Displays panel) on the [website](https://opendisplay.jpmo.dev.br/#screenshots).
+```
+60 fps · total 38/52ms · rtt 1ms
+cap 4 · enc 5 · net 2 · q 0 · dec 12 · disp 15
+OMX.hisi.video.decoder.avc (hw) · low-latency: hisi
+```
 
-## Features
-
-- H.264 video reception via `MediaCodec` (hardware decoding), straight to a `Surface`.
-- Handshake, ping/pong and mDNS discovery compatible with the original Mac sender's protocol.
-- One-finger touch becomes a mouse click/drag; a two-finger gesture becomes scroll (both in
-  Extend mode — Mirror mode on the Mac app is view-only, touch and scroll are silently ignored there).
-- Pinch to zoom into the video and, once zoomed, drag with three fingers to pan around it — both
-  client-side (no wire protocol change) and touch still lands on the right spot on the Mac while
-  zoomed. Both can be turned off in Settings.
-- Overlaid remote cursor (dot or decoded sprite, mirroring the Mac's cursor).
-- Foreground service: the connection survives the app going to background and resumes correctly
-  after unlocking the screen.
-- Auto-enters Picture-in-Picture when you leave the app while connected — same as Netflix/Prime
-  Video — so the video keeps playing in a floating window while you use something else.
-- Editable mDNS name; the settings screen also shows this device's own address for troubleshooting.
-- Optional performance HUD (fps, end-to-end latency, RTT).
-- Adaptive UI (Jetpack Compose) for phone and tablet.
-
-## Compare
-
-For using an Android tablet as an external monitor, against the best-known alternatives:
-
-| | OpenDisplay Android | Duet Display | Spacedesk |
-|---|---|---|---|
-| Price | Free | Paid | Free (core) |
-| Open source | GPL-3.0 | No | No |
-| Account required | No | Yes | No |
-| Same protocol as OpenDisplay Mac | Yes | No | No |
-| Central server | None | Yes | No |
-
-## Requirements
-
-- Android 8.0 (API 26) or higher. **v0.0.7 and earlier crash on launch on Android 12–13
-  (API 30-33)** — `WindowMetrics.getDensity()` was gated behind the wrong API level; fixed in
-  v0.0.8, use that or newer (reported by [@gaeaearth](https://github.com/gaeaearth), fixed by
-  [@edoardomich](https://github.com/edoardomich) in [#5](https://github.com/josepacelli/opendisplay-android/pull/5)).
-- Same WiFi network as the Mac (or a USB connection via `adb forward` — see below).
-- The original [OpenDisplay](https://github.com/peetzweg/opendisplay) Mac app, unmodified.
-- Tested on real hardware (Samsung Galaxy Tab S9 FE+ and Galaxy Note10+/Tab S7+, Android 12
-  through 16) — not yet across a wide range of devices.
+`cap` needs an extra timestamp that only the sender fork sends; with the official Mac app that
+stage shows `–` and the rest still works.
 
 ## Install
 
-Download the latest APK from [GitHub Releases](https://github.com/josepacelli/opendisplay-android/releases/latest)
-and sideload it (`adb install`, or copy it to the device and enable "unknown sources").
+1. **Mac:** build the sender fork — see
+   [ANDROID-USB.md](https://github.com/diacunap/opendisplay/blob/main/ANDROID-USB.md).
+2. **Tablet:** enable Developer options → **USB debugging** (on Huawei also *"Allow ADB debugging
+   in charge only mode"*), then build and install this app:
 
-The Google Play version is in closed testing — want in as a tester? Email
-[josepacelli@gmail.com](mailto:josepacelli@gmail.com).
+   ```sh
+   ./gradlew assembleRelease     # needs JDK 17+ and the Android SDK (local.properties → sdk.dir)
+   adb uninstall io.github.josepacelli.opendisplay   # only if an upstream build is installed
+   adb install -r app/build/outputs/apk/release/app-release.apk
+   ```
 
-## Build
+   A release APK must be signed: see `app/build.gradle.kts` for the keystore setup, or sign the
+   unsigned APK with `apksigner`.
+3. Plug the cable and open the app on the tablet. The Mac connects on its own.
+
+Diagnostics:
 
 ```sh
-./gradlew assembleDebug          # build
-./gradlew installDebug           # install on a connected device/emulator
-adb logcat -s OpenDisplay:*      # app logs
+adb logcat -s OpenDisplay:*                         # receiver log
+grep PHONE-STATS ~/Library/Logs/OpenDisplay/*.log   # latency, on the Mac
+# turn the vendor low-latency keys off (to rule them out), then reopen the app:
+adb shell touch /sdcard/Android/data/io.github.josepacelli.opendisplay/files/no-lowlatency
 ```
 
-Requires the Android SDK installed, with `ANDROID_HOME`/`local.properties` pointing to it.
+## Tested on
 
-To produce a signed release APK, set up a release keystore and a `keystore.properties` file at
-the repo root (both kept out of version control) — see `app/build.gradle.kts` for the expected
-format, then run `./gradlew assembleRelease`.
+| Device | OS | Result |
+| --- | --- | --- |
+| Huawei MatePad 10.4 (BAH3-W59) | HarmonyOS 2 (API 29) | USB connection working with the sender fork; latency figures and glitch fixes being validated |
 
-## Usage
+Upstream was tested on Samsung Galaxy Tab S9 FE+, Note10+ and Tab S7+ (Android 12–16).
+Reports from other devices are welcome: include the HUD's decoder line and a `PHONE-STATS` line.
 
-1. Open the app on Android — it starts advertising itself via mDNS and listening on port 9000.
-2. On the Mac, open the original OpenDisplay app in `extend` mode (WiFi) and pick the Android
-   device from the list.
-3. If the Mac doesn't see the device, check that both are on the same WiFi network and that it
-   isn't blocking multicast/mDNS traffic — the Mac app has no manual IP-entry field, so WiFi
-   discovery is the only supported path (USB is the fallback, see below).
+## Known issues
 
-USB connection details (via `adb forward`, without requiring `usbmuxd`) are covered in
-[peetzweg/opendisplay's `Mac/OpenSidecarMacApp.swift`](https://github.com/peetzweg/opendisplay) —
-the Mac app dials plain TCP to a configured `host`/`port` override when set, which `adb forward`
-can tunnel over USB to this app's existing listener on port 9000.
+- **Fullscreen video in a Mac browser** (e.g. YouTube) can show only the "exit full screen"
+  overlay on the extended display: macOS presents fullscreen video outside normal composition,
+  so screen capture doesn't see it. Use theater mode or a maximized window. Not specific to this
+  fork.
+- Under investigation: the picture freezing after ~1 minute of Mac inactivity on the MatePad.
 
-## Relationship to the original project
+## Everything else
 
-This is an independent client, maintained separately, that implements the same network protocol
-as [OpenDisplay](https://github.com/peetzweg/opendisplay) (`peetzweg/opendisplay`) to interoperate
-with the original Mac app without requiring any change to it. It is not affiliated with the
-original project's author.
+All upstream features are kept: hardware H.264 to a `Surface`, Bonjour discovery, touch →
+click/drag, two-finger scroll, pinch-zoom and pan, remote cursor, foreground service,
+Picture-in-Picture, the AOA accessory transport, and the adaptive Compose UI. See the
+[upstream README](https://github.com/josepacelli/opendisplay-android#readme) for those.
 
-## Acknowledgments
+## Credits & license
 
-- [@gaeaearth](https://github.com/gaeaearth) has been this project's most active early tester —
-  reported the Android 12/13 launch crash
-  ([#4](https://github.com/josepacelli/opendisplay-android/issues/4)), the screen-timeout/
-  reconnect issues ([#10](https://github.com/josepacelli/opendisplay-android/issues/10), also the
-  suggestion behind the idle-screen fix in
-  [#28](https://github.com/josepacelli/opendisplay-android/issues/28)), and the misleading
-  manual-connection hint ([#18](https://github.com/josepacelli/opendisplay-android/issues/18)).
-  Thank you for the sustained, careful bug reports.
-- [@edoardomich](https://github.com/edoardomich) fixed the Android 12/13 launch crash
-  ([#5](https://github.com/josepacelli/opendisplay-android/pull/5)).
-- [@jpbhdrey](https://github.com/jpbhdrey) built the USB accessory (AOA) transport
-  ([#33](https://github.com/josepacelli/opendisplay-android/pull/33)) — plug the cable, tap the
-  system's prompt, no developer options or `adb` dance required.
-- [@dyss1992](https://github.com/dyss1992) reported the Mirror mode aspect ratio bug on some
-  Qualcomm decoders, with a controlled before/after comparison that made the root cause obvious
-  ([#44](https://github.com/josepacelli/opendisplay-android/issues/44)), and suggested the
-  immersive fullscreen mode
-  ([#45](https://github.com/josepacelli/opendisplay-android/issues/45)).
-- [@gilsonfiho](https://github.com/gilsonfiho) hardened the app and CI: pinned GitHub Actions to
-  commit SHAs ([#153](https://github.com/josepacelli/opendisplay-android/pull/153)), truncated the
-  peer-supplied update message
-  ([#162](https://github.com/josepacelli/opendisplay-android/pull/162)), and rejected session
-  takeover by a different peer
-  ([#165](https://github.com/josepacelli/opendisplay-android/pull/165)).
+- Android receiver by [@josepacelli](https://github.com/josepacelli) and its contributors
+  (see the upstream acknowledgments).
+- OpenDisplay protocol and Mac app by [Philip Poloczek (@peetzweg)](https://github.com/peetzweg/opendisplay).
+- Fork changes by [@diacunap](https://github.com/diacunap).
 
-## Support
-
-One-person side project, built evenings and weekends, not a company. If it saved you from buying
-a monitor, [a tip on Ko-fi](https://ko-fi.com/Q3D5259MWT) helps keep it maintained and free for
-everyone.
-
-## License
-
-GPL-3.0, the same license as the original project. See [`LICENSE`](LICENSE) and
-[`NOTICE`](NOTICE) for copyright notices.
+GPL-3.0, the same license as both upstream projects. See [`LICENSE`](LICENSE) and
+[`NOTICE`](NOTICE).
