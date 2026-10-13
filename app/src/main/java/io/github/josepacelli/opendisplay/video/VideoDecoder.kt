@@ -158,6 +158,11 @@ class VideoDecoder(
             format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
             applied += "std"
         }
+        // Diagnostic kill-switch, no UI needed:
+        //   adb shell touch /sdcard/Android/data/io.github.josepacelli.opendisplay/files/no-lowlatency
+        if (java.io.File(NO_LOW_LATENCY_FLAG).exists()) {
+            return if (applied.isEmpty()) "off (flag)" else applied.joinToString("+") + " (vendor off)"
+        }
         val n = codecName?.lowercase() ?: ""
         when {
             n.contains("hisi") -> {
@@ -289,8 +294,11 @@ class VideoDecoder(
     private fun queueAccessUnit(mediaCodec: MediaCodec, frame: VideoFrame) {
         val nalus = frame.vclNalus
         try {
-            val index = mediaCodec.dequeueInputBuffer(0)
+            // Wait briefly for a free input buffer instead of dropping the frame outright:
+            // a dropped frame corrupts every frame after it until the next keyframe.
+            val index = mediaCodec.dequeueInputBuffer(INPUT_WAIT_US)
             if (index < 0) {
+                Log.warn("decoder input full for ${INPUT_WAIT_US / 1000}ms — dropping frame, requesting keyframe")
                 signalDesync()
                 return
             }
@@ -454,6 +462,9 @@ class VideoDecoder(
         private const val DRAIN_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 200L
         private const val MAX_IN_FLIGHT = 240
+        private const val INPUT_WAIT_US = 30_000L
+        private const val NO_LOW_LATENCY_FLAG =
+            "/sdcard/Android/data/io.github.josepacelli.opendisplay/files/no-lowlatency"
         private const val RENDER_CALLBACK_GRACE = 60
     }
 }

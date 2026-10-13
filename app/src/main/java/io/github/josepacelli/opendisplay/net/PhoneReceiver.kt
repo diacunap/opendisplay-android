@@ -316,7 +316,9 @@ class PhoneReceiver(context: Context) {
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
     private val _videoFrames = MutableSharedFlow<VideoFrame>(
-        extraBufferCapacity = 4,
+        // ~250ms at 60fps: absorbs a decoder/GC hiccup without dropping (a drop breaks
+        // the reference chain and costs a keyframe round-trip).
+        extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     val videoFrames: SharedFlow<VideoFrame> = _videoFrames.asSharedFlow()

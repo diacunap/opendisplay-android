@@ -30,6 +30,9 @@ import io.github.josepacelli.opendisplay.util.Log
 import io.github.josepacelli.opendisplay.video.VideoDecoder
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 
@@ -92,8 +95,13 @@ fun VideoSurface(
         }
     }
 
+    // Feed the decoder off the main thread: a UI hiccup (HUD recomposition, a gesture)
+    // must never stall frame submission, or frames pile up, get dropped, and the picture
+    // glitches until the next keyframe.
     LaunchedEffect(receiver) {
-        receiver.videoFrames.collect { frame -> decoder?.submit(frame) }
+        withContext(decodeDispatcher) {
+            receiver.videoFrames.collect { frame -> decoder?.submit(frame) }
+        }
     }
 
     AndroidView(
@@ -455,3 +463,8 @@ private fun centroidOf(changes: List<PointerInputChange>): Offset {
  * @return their distance apart, in local coordinates, or 0f if fewer than two are active. */
 private fun distanceOf(changes: List<PointerInputChange>): Float =
     if (changes.size < 2) 0f else (changes[0].position - changes[1].position).getDistance()
+
+/** One dedicated thread feeds MediaCodec, in order. */
+private val decodeDispatcher = Executors.newSingleThreadExecutor { r ->
+    Thread(r, "VideoDecoder-feed").apply { isDaemon = true; priority = Thread.MAX_PRIORITY }
+}.asCoroutineDispatcher()
