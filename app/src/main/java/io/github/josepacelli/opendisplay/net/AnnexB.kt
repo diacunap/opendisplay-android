@@ -98,10 +98,12 @@ object AnnexB {
         return ParsedFrame(telemetryPrefix, sps, pps, vcl)
     }
 
-    data class Telemetry(val captureMs: Long?, val sendMs: Long?)
+    /** `scr` (optional, patched senders): wall-clock ms the compositor produced the frame. */
+    data class Telemetry(val captureMs: Long?, val sendMs: Long?, val screenMs: Long? = null)
 
     private val CAP_FIELD = Regex("\"cap\"\\s*:\\s*(-?\\d+)")
     private val SND_FIELD = Regex("\"snd\"\\s*:\\s*(-?\\d+)")
+    private val SCR_FIELD = Regex("\"scr\"\\s*:\\s*(-?\\d+)")
 
     /**
      * Extracts `cap`/`snd` from a telemetry prefix without pulling in a JSON
@@ -116,6 +118,7 @@ object AnnexB {
         val text = String(prefix, Charsets.UTF_8)
         val cap = CAP_FIELD.find(text)?.groupValues?.get(1)?.toLongOrNull()
         val snd = SND_FIELD.find(text)?.groupValues?.get(1)?.toLongOrNull()
-        return Telemetry(cap, snd)
+        val scr = SCR_FIELD.find(text)?.groupValues?.get(1)?.toLongOrNull()
+        return Telemetry(cap, snd, scr)
     }
 }

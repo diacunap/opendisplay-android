@@ -70,7 +70,34 @@ data class VideoFrame(
     /** Monotonically increasing per-connection index, assigned at dispatch — lets the
      * decoder notice a frame the buffer dropped before it got here (see RATIONALE.md). */
     val seq: Long = 0,
+    /** `System.nanoTime()` when the last byte of this frame arrived — start of the
+     * receiver-side latency stages (queue/decode/display). */
+    val arrivalNanos: Long = 0L,
+    /** Sender-side stage durations, ms, from the telemetry prefix + clock offset; null
+     * when the sender didn't stamp them or the offset isn't known yet. */
+    val captureStageMs: Double? = null,
+    val encodeStageMs: Double? = null,
+    val networkStageMs: Double? = null,
 )
+
+/** One frame's journey, stage by stage, in ms — produced by the decoder when the frame
+ * hits the screen. Stages the sender didn't stamp are null.
+ * capture = compositor -> encoder submit (Mac), encode = encoder -> socket (Mac),
+ * network = Mac socket -> last byte here (cable/WiFi + kernel), queue = arrival ->
+ * decoder input, decode = decoder input -> decoded picture, display = decoded ->
+ * composited on screen (null where the device doesn't report render times). */
+data class LatencySample(
+    val captureMs: Double?,
+    val encodeMs: Double?,
+    val networkMs: Double?,
+    val queueMs: Double,
+    val decodeMs: Double,
+    val displayMs: Double?,
+) {
+    val totalMs: Double
+        get() = (captureMs ?: 0.0) + (encodeMs ?: 0.0) + (networkMs ?: 0.0) +
+            queueMs + decodeMs + (displayMs ?: 0.0)
+}
 
 /** Something the Mac peer told us that the UI needs to surface — version mismatch,
  * or a different device taking over the session. */
@@ -95,6 +122,19 @@ data class PerfStats(
     val e2eP50Ms: Double = 0.0,
     val e2eP95Ms: Double = 0.0,
     val rttMs: Double = 0.0,
+    /** Per-stage medians over the window (see [LatencySample]); null = not measured. */
+    val captureP50Ms: Double? = null,
+    val encodeP50Ms: Double? = null,
+    val networkP50Ms: Double? = null,
+    val queueP50Ms: Double? = null,
+    val decodeP50Ms: Double? = null,
+    val displayP50Ms: Double? = null,
+    val totalP50Ms: Double? = null,
+    val totalP95Ms: Double? = null,
+    /** Decoded frames dropped in favour of a newer one (render-latest policy), this window. */
+    val renderSkips: Int = 0,
+    /** e.g. "OMX.hisi.video.decoder.avc · low-latency". */
+    val decoderInfo: String? = null,
 )
 
 /** Screen corner the perf HUD renders in — user-editable in Settings (#63). */
@@ -307,6 +347,29 @@ class PhoneReceiver(context: Context) {
     private var perfWindowStartMs = System.currentTimeMillis()
     private val e2eWindow = mutableListOf<Double>()
     @Volatile private var lastRttMs: Double = 0.0
+    private val latencyLock = Any()
+    private val latencyWindow = mutableListOf<LatencySample>()
+    private val renderSkipsThisWindow = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile private var decoderInfo: String? = null
+    private var perfWindowsSinceStats = 0
+
+    /** Called from the decoder's render path, any thread. */
+    fun recordLatency(sample: LatencySample) {
+        synchronized(latencyLock) {
+            if (latencyWindow.size < 1000) latencyWindow.add(sample)
+        }
+    }
+
+    /** Called from the decoder's drain thread when a stale decoded frame is skipped. */
+    fun recordRenderSkip() {
+        renderSkipsThisWindow.incrementAndGet()
+    }
+
+    /** Called when a decoder is (re)configured, for the HUD and the Mac-side log. */
+    fun setDecoderInfo(info: String) {
+        decoderInfo = info
+        Log.info("decoder: $info")
+    }
 
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
@@ -1012,14 +1075,28 @@ class PhoneReceiver(context: Context) {
         val parsed = AnnexB.parse(frame)
         if (parsed.vclNalus.isEmpty() && parsed.sps == null && parsed.pps == null) return
         val telemetry = AnnexB.parseTelemetry(parsed.telemetryPrefix)
+        val arrivalNanos = System.nanoTime()
+        val offset = clockOffsetMs
+        val cap = telemetry.captureMs
+        val snd = telemetry.sendMs
+        val scr = telemetry.screenMs
         _videoFrames.tryEmit(
             VideoFrame(
                 parsed.sps,
                 parsed.pps,
                 parsed.vclNalus,
-                telemetry.captureMs,
-                telemetry.sendMs,
+                cap,
+                snd,
                 seq = nextVideoFrameSeq++,
+                arrivalNanos = arrivalNanos,
+                captureStageMs = if (scr != null && cap != null) (cap - scr).toDouble().takeIf { it in 0.0..1000.0 } else null,
+                encodeStageMs = if (cap != null && snd != null) (snd - cap).toDouble().takeIf { it in 0.0..1000.0 } else null,
+                // Mac clock "now" = our clock + offset; offset error is ~RTT/2 (sub-ms on USB).
+                networkStageMs = if (snd != null && offset != null) {
+                    ((nowMs() + offset) - snd).coerceAtLeast(0.0).takeIf { it < 5000.0 }
+                } else {
+                    null
+                },
             ),
         )
         recordPerfSample(telemetry.captureMs)
@@ -1043,16 +1120,64 @@ class PhoneReceiver(context: Context) {
 
         val sorted = e2eWindow.sorted()
         val e2eP95 = percentile(sorted, 0.95)
-        _perf.value = PerfStats(
+        val samples = synchronized(latencyLock) {
+            val copy = latencyWindow.toList()
+            latencyWindow.clear()
+            copy
+        }
+        fun p50(values: List<Double?>): Double? {
+            val present = values.filterNotNull().sorted()
+            return if (present.isEmpty()) null else percentile(present, 0.5)
+        }
+        val totals = samples.map { it.totalMs }.sorted()
+        val stats = PerfStats(
             fps = (framesThisWindow * 1000 / elapsedMs).toInt(),
             e2eP50Ms = percentile(sorted, 0.5),
             e2eP95Ms = e2eP95,
             rttMs = lastRttMs,
+            captureP50Ms = p50(samples.map { it.captureMs }),
+            encodeP50Ms = p50(samples.map { it.encodeMs }),
+            networkP50Ms = p50(samples.map { it.networkMs }),
+            queueP50Ms = p50(samples.map { it.queueMs }),
+            decodeP50Ms = p50(samples.map { it.decodeMs }),
+            displayP50Ms = p50(samples.map { it.displayMs }),
+            totalP50Ms = if (totals.isEmpty()) null else percentile(totals, 0.5),
+            totalP95Ms = if (totals.isEmpty()) null else percentile(totals, 0.95),
+            renderSkips = renderSkipsThisWindow.getAndSet(0),
+            decoderInfo = decoderInfo,
         )
+        _perf.value = stats
+        // Every ~5s, mirror the breakdown into the Mac's log (it logs `stats` as
+        // PHONE-STATS lines), so one desktop log file tells the whole story.
+        if (++perfWindowsSinceStats >= 5) {
+            perfWindowsSinceStats = 0
+            sendLatencyStats(stats)
+        }
         if (lastRttMs > RTT_UNSTABLE_MS || e2eP95 > E2E_P95_UNSTABLE_MS) notifyConnectionUnstable()
         framesThisWindow = 0
         e2eWindow.clear()
         perfWindowStartMs = System.currentTimeMillis()
+    }
+
+    /** Free-form `stats` message (PROTOCOL.md §6.1) carrying the latency breakdown. */
+    private fun sendLatencyStats(stats: PerfStats) {
+        if (link == null) return
+        val msg = JSONObject().put("type", WireMessage.STATS).put("fps", stats.fps)
+        fun put(key: String, value: Double?) {
+            if (value != null) msg.put(key, Math.round(value * 10) / 10.0)
+        }
+        put("cap50", stats.captureP50Ms)
+        put("enc50", stats.encodeP50Ms)
+        put("net50", stats.networkP50Ms)
+        put("que50", stats.queueP50Ms)
+        put("dec50", stats.decodeP50Ms)
+        put("disp50", stats.displayP50Ms)
+        put("tot50", stats.totalP50Ms)
+        put("tot95", stats.totalP95Ms)
+        put("rtt", stats.rttMs)
+        msg.put("skips", stats.renderSkips)
+        stats.decoderInfo?.let { msg.put("decoder", it) }
+        sendControl(msg)
     }
 
     /** Nearest-rank percentile lookup.

@@ -279,8 +279,22 @@ private fun PerfHudPosition.toAlignment(): Alignment = when (this) {
 @Composable
 private fun PerfHud(receiver: PhoneReceiver, modifier: Modifier = Modifier) {
     val perf by receiver.perf.collectAsState()
+    fun ms(v: Double?) = v?.let { if (it < 10) "%.1f".format(it) else it.toInt().toString() } ?: "–"
+    val lines = buildList {
+        add(
+            "${perf.fps} fps · total ${ms(perf.totalP50Ms)}/${ms(perf.totalP95Ms)}ms" +
+                " · rtt ${ms(perf.rttMs)}ms" + if (perf.renderSkips > 0) " · skip ${perf.renderSkips}" else "",
+        )
+        if (perf.totalP50Ms != null) {
+            add(
+                "cap ${ms(perf.captureP50Ms)} · enc ${ms(perf.encodeP50Ms)} · net ${ms(perf.networkP50Ms)}" +
+                    " · q ${ms(perf.queueP50Ms)} · dec ${ms(perf.decodeP50Ms)} · disp ${ms(perf.displayP50Ms)}",
+            )
+        }
+        perf.decoderInfo?.let { add(it) }
+    }
     Text(
-        text = "${perf.fps} fps · e2e ${perf.e2eP50Ms.toInt()}/${perf.e2eP95Ms.toInt()}ms · rtt ${perf.rttMs.toInt()}ms",
+        text = lines.joinToString("\n"),
         color = Color.White,
         style = MaterialTheme.typography.labelSmall,
         modifier = modifier

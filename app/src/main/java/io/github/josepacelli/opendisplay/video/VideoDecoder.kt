@@ -1,10 +1,15 @@
 package io.github.josepacelli.opendisplay.video
 
 import android.media.MediaCodec
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.view.Surface
+import io.github.josepacelli.opendisplay.net.LatencySample
 import io.github.josepacelli.opendisplay.net.VideoFrame
+import java.util.concurrent.ConcurrentHashMap
 import io.github.josepacelli.opendisplay.util.Log
 import java.nio.ByteBuffer
 
@@ -58,7 +63,29 @@ class VideoDecoder(
     private var expectedHeight: Int,
     private val onSizeChanged: (width: Int, height: Int) -> Unit = { _, _ -> },
     private val onError: (desyncCount: Int) -> Unit = {},
+    /** One sample per frame that reached the screen — see [LatencySample]. Any thread. */
+    private val onLatency: (LatencySample) -> Unit = {},
+    /** A decoded frame was dropped because a newer one was already waiting. */
+    private val onRenderSkip: () -> Unit = {},
+    /** Codec name + which low-latency mode got applied, once per (re)configure. */
+    private val onDecoderInfo: (String) -> Unit = {},
 ) {
+    /** Per-frame timestamps, keyed by the presentationTimeUs we hand MediaCodec. */
+    private class Timing(
+        val arrivalNanos: Long,
+        val captureMs: Double?,
+        val encodeMs: Double?,
+        val networkMs: Double?,
+        val submitNanos: Long,
+    ) {
+        @Volatile var outputNanos: Long = 0L
+    }
+    private val inFlight = ConcurrentHashMap<Long, Timing>()
+    private var lastPtsUs = 0L
+    @Volatile private var renderCallbacksSeen = 0
+    @Volatile private var outputsRendered = 0
+    private var renderThread: HandlerThread? = null
+
     @Volatile private var codec: MediaCodec? = null
     @Volatile private var drainThread: Thread? = null
     private var currentSps: ByteArray? = null
@@ -117,7 +144,76 @@ class VideoDecoder(
         lastSeq = frame.seq
         if (frame.vclNalus.isEmpty()) return
         val mediaCodec = codec ?: return
-        queueAccessUnit(mediaCodec, frame.vclNalus)
+        queueAccessUnit(mediaCodec, frame)
+    }
+
+    /** Low-latency decode switches. Android 11+ has a standard key; older builds
+     * (HarmonyOS 2 reports API 29) only honour the SoC vendor's own keys, so pick
+     * those by codec name — the same keys Moonlight/scrcpy-style clients use.
+     * Without them HiSilicon (Kirin) and others hold several frames before output.
+     * @return a short label of what was applied, for the HUD/log. */
+    private fun applyLowLatencyKeys(format: MediaFormat, codecName: String?): String {
+        val applied = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+            applied += "std"
+        }
+        val n = codecName?.lowercase() ?: ""
+        when {
+            n.contains("hisi") -> {
+                format.setInteger("vendor.hisi-ext-low-latency-video-dec.video-scene-for-low-latency-req", 1)
+                format.setInteger("vendor.hisi-ext-low-latency-video-dec.video-scene-for-low-latency-rdy", -1)
+                applied += "hisi"
+            }
+            n.contains("qcom") || n.contains("qti") -> {
+                format.setInteger("vendor.qti-ext-dec-low-latency.enable", 1)
+                format.setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
+                applied += "qti"
+            }
+            n.contains("exynos") -> {
+                format.setInteger("vendor.rtc-ext-dec-low-latency.enable", 1)
+                applied += "exynos"
+            }
+            n.contains("mtk") || n.contains("mediatek") -> {
+                format.setInteger("vendor.mtk.vdec.low-latency.enable", 1)
+                applied += "mtk"
+            }
+        }
+        return if (applied.isEmpty()) "none" else applied.joinToString("+")
+    }
+
+    /** Render timestamps from the compositor (API 23+): the real "on screen" moment.
+     * Some vendor builds never fire it — then [drainLoop] reports display as unknown. */
+    private fun attachRenderListener(mediaCodec: MediaCodec) {
+        val thread = renderThread ?: HandlerThread("VideoDecoder-render").also {
+            it.start()
+            renderThread = it
+        }
+        try {
+            mediaCodec.setOnFrameRenderedListener({ _, presentationTimeUs, nanoTime ->
+                renderCallbacksSeen++
+                val timing = inFlight.remove(presentationTimeUs) ?: return@setOnFrameRenderedListener
+                emitSample(timing, renderedNanos = nanoTime)
+            }, Handler(thread.looper))
+        } catch (e: Exception) {
+            Log.warn("render timestamps unavailable: ${e.message}")
+        }
+    }
+
+    private fun emitSample(timing: Timing, renderedNanos: Long?) {
+        val out = timing.outputNanos.takeIf { it > 0 } ?: return
+        val queueMs = if (timing.arrivalNanos > 0) (timing.submitNanos - timing.arrivalNanos) / 1e6 else 0.0
+        val displayMs = renderedNanos?.let { ((it - out) / 1e6).takeIf { d -> d in 0.0..500.0 } }
+        onLatency(
+            LatencySample(
+                captureMs = timing.captureMs,
+                encodeMs = timing.encodeMs,
+                networkMs = timing.networkMs,
+                queueMs = queueMs.coerceAtLeast(0.0),
+                decodeMs = ((out - timing.submitNanos) / 1e6).coerceAtLeast(0.0),
+                displayMs = displayMs,
+            ),
+        )
     }
 
     /** Tears down any existing codec and builds a fresh one from [currentSps]/[currentPps]. */
@@ -134,19 +230,45 @@ class VideoDecoder(
         val seedWidth = spsDims?.width ?: expectedWidth
         val seedHeight = spsDims?.height ?: expectedHeight
         try {
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, seedWidth, seedHeight)
-            format.setByteBuffer("csd-0", ByteBuffer.wrap(START_CODE + sps))
-            format.setByteBuffer("csd-1", ByteBuffer.wrap(START_CODE + pps))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+            fun baseFormat(): MediaFormat {
+                val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, seedWidth, seedHeight)
+                format.setByteBuffer("csd-0", ByteBuffer.wrap(START_CODE + sps))
+                format.setByteBuffer("csd-1", ByteBuffer.wrap(START_CODE + pps))
+                format.setInteger(MediaFormat.KEY_PRIORITY, 0)
+                return format
             }
-            format.setInteger(MediaFormat.KEY_PRIORITY, 0)
+            val name = try {
+                MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(baseFormat())
+            } catch (_: Exception) {
+                null
+            }
+            val tuned = baseFormat()
+            val lowLatency = applyLowLatencyKeys(tuned, name)
 
-            val mediaCodec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            mediaCodec.configure(format, surface, null, 0)
+            var mediaCodec = if (name != null) MediaCodec.createByCodecName(name)
+            else MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            var applied = lowLatency
+            try {
+                mediaCodec.configure(tuned, surface, null, 0)
+            } catch (e: Exception) {
+                // A vendor key the codec rejects must never cost us the picture.
+                Log.warn("decoder refused low-latency keys ($lowLatency) — retrying plain: ${e.message}")
+                try { mediaCodec.release() } catch (_: Exception) {}
+                mediaCodec = if (name != null) MediaCodec.createByCodecName(name)
+                else MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                mediaCodec.configure(baseFormat(), surface, null, 0)
+                applied = "none"
+            }
+            attachRenderListener(mediaCodec)
             mediaCodec.start()
             codec = mediaCodec
             startDrainThread(mediaCodec)
+            val hw = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    if (mediaCodec.codecInfo.isHardwareAccelerated) "hw" else "SOFTWARE"
+                } catch (_: Exception) { "?" }
+            } else "?"
+            onDecoderInfo("${mediaCodec.name} ($hw) · low-latency: $applied")
             Log.info("MediaCodec configured, seed ${seedWidth}x$seedHeight (sps-derived: $spsDimensionsKnown)")
         } catch (e: Exception) {
             Log.error("MediaCodec configure failed", e)
@@ -164,7 +286,8 @@ class VideoDecoder(
     /** Writes one access unit's NALUs into an input buffer and submits it.
      * @param mediaCodec the running codec to submit into.
      * @param nalus every NALU belonging to this access unit, in wire order. */
-    private fun queueAccessUnit(mediaCodec: MediaCodec, nalus: List<ByteArray>) {
+    private fun queueAccessUnit(mediaCodec: MediaCodec, frame: VideoFrame) {
+        val nalus = frame.vclNalus
         try {
             val index = mediaCodec.dequeueInputBuffer(0)
             if (index < 0) {
@@ -179,7 +302,17 @@ class VideoDecoder(
                 inputBuffer.put(nalu)
                 size += START_CODE.size + nalu.size
             }
-            mediaCodec.queueInputBuffer(index, 0, size, System.nanoTime() / 1000, 0)
+            val submitNanos = System.nanoTime()
+            // Unique, increasing pts: it is our key back to this frame's timestamps.
+            var ptsUs = submitNanos / 1000
+            if (ptsUs <= lastPtsUs) ptsUs = lastPtsUs + 1
+            lastPtsUs = ptsUs
+            if (inFlight.size > MAX_IN_FLIGHT) inFlight.clear()   // codec dropped frames; don't leak
+            inFlight[ptsUs] = Timing(
+                frame.arrivalNanos, frame.captureStageMs, frame.encodeStageMs,
+                frame.networkStageMs, submitNanos,
+            )
+            mediaCodec.queueInputBuffer(index, 0, size, ptsUs, 0)
         } catch (e: Exception) {
             Log.error("decode failed — rebuilding on the next keyframe", e)
             signalError()
@@ -226,6 +359,7 @@ class VideoDecoder(
      * @param mediaCodec the codec this thread owns. */
     private fun drainLoop(mediaCodec: MediaCodec) {
         val info = MediaCodec.BufferInfo()
+        val peekInfo = MediaCodec.BufferInfo()
         while (codec === mediaCodec) {
             val outIndex = try {
                 mediaCodec.dequeueOutputBuffer(info, DRAIN_TIMEOUT_US)
@@ -235,20 +369,48 @@ class VideoDecoder(
             }
             when {
                 outIndex >= 0 -> try {
-                    mediaCodec.releaseOutputBuffer(outIndex, true)
+                    var index = outIndex
+                    var pts = info.presentationTimeUs
+                    inFlight[pts]?.outputNanos = System.nanoTime()
+                    // Render-latest: if the decoder already has a newer picture, showing
+                    // this one first only adds a refresh of lag. Skip it (never breaks the
+                    // reference chain — decoding already happened).
+                    while (true) {
+                        val next = mediaCodec.dequeueOutputBuffer(peekInfo, 0)
+                        if (next >= 0) {
+                            mediaCodec.releaseOutputBuffer(index, false)
+                            inFlight.remove(pts)
+                            onRenderSkip()
+                            index = next
+                            pts = peekInfo.presentationTimeUs
+                            inFlight[pts]?.outputNanos = System.nanoTime()
+                        } else if (next == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            onOutputFormatChanged(mediaCodec)
+                        } else {
+                            break
+                        }
+                    }
+                    mediaCodec.releaseOutputBuffer(index, true)
+                    outputsRendered++
+                    // No compositor callbacks on this device: report what we can now.
+                    if (renderCallbacksSeen == 0 && outputsRendered > RENDER_CALLBACK_GRACE) {
+                        inFlight.remove(pts)?.let { emitSample(it, renderedNanos = null) }
+                    }
                 } catch (e: Exception) {
                     if (codec === mediaCodec) signalError()
                     return
                 }
-                outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    val format = mediaCodec.outputFormat
-                    val width = format.getInteger(MediaFormat.KEY_WIDTH)
-                    val height = format.getInteger(MediaFormat.KEY_HEIGHT)
-                    Log.info("decoder output format changed: ${width}x$height")
-                    if (!spsDimensionsKnown) onSizeChanged(width, height)
-                }
+                outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> onOutputFormatChanged(mediaCodec)
             }
         }
+    }
+
+    private fun onOutputFormatChanged(mediaCodec: MediaCodec) {
+        val format = mediaCodec.outputFormat
+        val width = format.getInteger(MediaFormat.KEY_WIDTH)
+        val height = format.getInteger(MediaFormat.KEY_HEIGHT)
+        Log.info("decoder output format changed: ${width}x$height")
+        if (!spsDimensionsKnown) onSizeChanged(width, height)
     }
 
     /** Stops and releases the codec, if one exists — safe to call more than once, and safe
@@ -276,6 +438,14 @@ class VideoDecoder(
             } catch (_: Exception) {
             }
         }
+        inFlight.clear()
+    }
+
+    /** Final teardown: [release] plus the render-timestamp thread. */
+    fun close() {
+        release()
+        renderThread?.quitSafely()
+        renderThread = null
     }
 
     companion object {
@@ -283,5 +453,7 @@ class VideoDecoder(
         private const val DESYNC_EPISODE_GAP_MS = 5_000L
         private const val DRAIN_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 200L
+        private const val MAX_IN_FLIGHT = 240
+        private const val RENDER_CALLBACK_GRACE = 60
     }
 }

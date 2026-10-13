@@ -1,3 +1,13 @@
+> [!NOTE]
+> **Fork: USB + latency for older tablets.** This fork adds low-latency decode
+> on Android 10 and older (incl. HarmonyOS 2) via SoC vendor keys, a
+> render-latest output policy, and a **per-stage latency breakdown in ms**
+> (capture / encode / network / queue / decode / display) in the HUD. For a
+> plug-and-play **USB cable** connection, pair it with the Mac sender fork
+> [diacunap/opendisplay](https://github.com/diacunap/opendisplay).
+> Details: **[LATENCY-AND-USB.md](LATENCY-AND-USB.md)**.
+> Not affiliated with or supported by the upstream projects.
+
 # OpenDisplay Android
 
 ![OpenDisplay banner](web/public/banner.jpg)

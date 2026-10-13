@@ -138,6 +138,9 @@ fun VideoSurface(
                                     currentReceiver.notifyConnectionUnstable()
                                 }
                             },
+                            onLatency = currentReceiver::recordLatency,
+                            onRenderSkip = currentReceiver::recordRenderSkip,
+                            onDecoderInfo = currentReceiver::setDecoderInfo,
                         )
                         currentReceiver.requestKeyframe()
                     }
@@ -146,7 +149,7 @@ fun VideoSurface(
 
                     override fun surfaceDestroyed(holder: SurfaceHolder) {
                         Log.info("SurfaceView destroyed — releasing decoder")
-                        decoder?.release()
+                        decoder?.close()
                         decoder = null
                     }
                 })
@@ -155,7 +158,7 @@ fun VideoSurface(
     )
 
     DisposableEffect(Unit) {
-        onDispose { decoder?.release() }
+        onDispose { decoder?.close() }
     }
 }
 
